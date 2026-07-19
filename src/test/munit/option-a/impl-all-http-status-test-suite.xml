@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule
+  xmlns:http="http://www.mulesoft.org/schema/mule/http"
+  xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+  xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+  xmlns="http://www.mulesoft.org/schema/mule/core"
+  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+  xsi:schemaLocation="
+    http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+    http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+    http://www.mulesoft.org/schema/mule/munit-tools  http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+  <munit:config name="impl-all-http-status-test-suite.xml" />
+
+  <!-- Same Option A technique (a real local HTTP listener acting as mock server),
+       but exercising EVERY HTTP status code so all of them are simulated in MUnit. -->
+  <munit:dynamic-port
+    propertyName="munit.dynamic.port.all-status"
+    min="6000"
+    max="7000" />
+
+  <http:listener-config
+    name="MUnit_AllStatus_HTTP_Listener_config"
+    doc:name="HTTP Listener config">
+    <http:listener-connection
+      host="0.0.0.0"
+      port="${munit.dynamic.port.all-status}" />
+  </http:listener-config>
+
+  <http:request-config name="MUnit_AllStatus_HTTP_Request_configuration">
+    <http:request-connection
+      host="localhost"
+      port="${munit.dynamic.port.all-status}" />
+  </http:request-config>
+
+  <!-- Mock server: returns whatever status code arrives via query params. -->
+  <flow name="munit-util-mock-http-all-status.listener">
+    <http:listener
+      doc:name="Listener"
+      config-ref="MUnit_AllStatus_HTTP_Listener_config"
+      path="/*">
+      <http:response
+        statusCode="#[(attributes.queryParams.statusCode default attributes.queryParams.httpStatus) default 200]"
+        reasonPhrase="#[attributes.queryParams.reasonPhrase]">
+        <http:headers>
+          <![CDATA[#[attributes.headers]]]>
+        </http:headers>
+      </http:response>
+      <http:error-response
+        statusCode="#[(attributes.queryParams.statusCode default attributes.queryParams.httpStatus) default 500]"
+        reasonPhrase="#[attributes.queryParams.reasonPhrase]">
+        <http:body>
+          <![CDATA[#[payload]]]>
+        </http:body>
+        <http:headers>
+          <![CDATA[#[attributes.headers]]]>
+        </http:headers>
+      </http:error-response>
+    </http:listener>
+    <logger
+      level="TRACE"
+      doc:name="doc: Listener echoes the request payload with the requested HTTP status" />
+  </flow>
+
+  <!-- All 2xx statuses are returned by the requester as regular (non-error) responses. -->
+  <munit:test
+    name="impl-all-http-status-success-codes-Test"
+    timeOut="900000">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-all-status.listener" />
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <set-variable
+        doc:name="successStatuses"
+        variableName="successStatuses"
+        value="#[[200, 201, 204, 209]]" />
+      <set-variable
+        doc:name="results"
+        variableName="results"
+        value="#[[]]" />
+      <foreach
+        doc:name="For Each success status"
+        collection="#[vars.successStatuses]">
+        <set-variable
+          doc:name="expectedStatus"
+          variableName="expectedStatus"
+          value="#[payload]" />
+        <http:request
+          config-ref="MUnit_AllStatus_HTTP_Request_configuration"
+          method="GET"
+          doc:name="HTTP Req to mock listener"
+          path="/">
+          <http:query-params>
+            <![CDATA[#[{ statusCode: vars.expectedStatus }]]]>
+          </http:query-params>
+        </http:request>
+        <set-variable
+          doc:name="results + { expected, actual }"
+          variableName="results"
+          value="#[vars.results + { expected: vars.expectedStatus, actual: attributes.statusCode }]" />
+      </foreach>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that
+        doc:name="Every success status was simulated as-is"
+        expression="#[vars.results filter ($.expected != $.actual)]"
+        is="#[MunitTools::equalTo([])]"
+        message="#['Some statuses were not simulated as expected: ' ++ write(vars.results, 'application/json')]" />
+      <munit-tools:assert-that
+        doc:name="All 4 success statuses were exercised"
+        expression="#[sizeOf(vars.results)]"
+        is="#[MunitTools::equalTo(4)]" />
+    </munit:validation>
+  </munit:test>
+
+  <!-- Every 4xx/5xx status raises a real Mule error on the requester side,
+       exactly like a failing external system would. -->
+  <munit:test
+    name="impl-all-http-status-error-codes-Test"
+    timeOut="900000">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-all-status.listener" />
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <set-variable
+        doc:name="errorStatuses"
+        variableName="errorStatuses"
+        value="#[[400, 401, 403, 404, 405, 409, 410, 415, 422, 429, 500, 502, 503, 504, 511]]" />
+      <set-variable
+        doc:name="results"
+        variableName="results"
+        value="#[[]]" />
+      <foreach
+        doc:name="For Each error status"
+        collection="#[vars.errorStatuses]">
+        <set-variable
+          doc:name="expectedStatus"
+          variableName="expectedStatus"
+          value="#[payload]" />
+        <try doc:name="Try">
+          <http:request
+            config-ref="MUnit_AllStatus_HTTP_Request_configuration"
+            method="GET"
+            doc:name="HTTP Req to mock listener"
+            path="/">
+            <http:query-params>
+              <![CDATA[#[{ statusCode: vars.expectedStatus }]]]>
+            </http:query-params>
+          </http:request>
+          <!-- Reaching this line means NO error was raised: record it so validation fails. -->
+          <set-variable
+            doc:name="results + { errorType: null }"
+            variableName="results"
+            value="#[vars.results + { expected: vars.expectedStatus, actual: attributes.statusCode, errorType: null }]" />
+          <error-handler>
+            <on-error-continue
+              enableNotifications="false"
+              logException="false"
+              doc:name="Capture simulated HTTP error">
+              <logger
+                level="INFO"
+                doc:name="Log simulated error"
+                message="#[output application/json --- { expected: vars.expectedStatus, statusCode: error.errorMessage.attributes.statusCode, errorType: (error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default '') }]" />
+              <set-variable
+                doc:name="results + { expected, actual, errorType }"
+                variableName="results"
+                value="#[vars.results + { expected: vars.expectedStatus, actual: error.errorMessage.attributes.statusCode, errorType: (error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default '') }]" />
+            </on-error-continue>
+          </error-handler>
+        </try>
+      </foreach>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that
+        doc:name="Every error status was simulated as-is"
+        expression="#[vars.results filter ($.expected != $.actual)]"
+        is="#[MunitTools::equalTo([])]"
+        message="#['Some statuses were not simulated as expected: ' ++ write(vars.results, 'application/json')]" />
+      <munit-tools:assert-that
+        doc:name="Every error status raised a Mule error"
+        expression="#[vars.results filter ($.errorType == null)]"
+        is="#[MunitTools::equalTo([])]"
+        message="#['Some statuses did NOT raise an error: ' ++ write(vars.results, 'application/json')]" />
+      <munit-tools:assert-that
+        doc:name="All 15 error statuses were exercised"
+        expression="#[sizeOf(vars.results)]"
+        is="#[MunitTools::equalTo(15)]" />
+    </munit:validation>
+  </munit:test>
+
+</mule>
