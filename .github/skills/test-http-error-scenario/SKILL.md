@@ -1,21 +1,104 @@
-<?xml version="1.0" encoding="UTF-8"?>
+---
+name: test-http-error-scenario
+description: "Add or update an Option A only HTTP error scenario with runtime flow and matching MUnit coverage using dynamic listener based realistic error generation."
+argument-hint: "Describe status code, payload, request target, and expected branch behavior"
+user-invocable: true
+---
 
-<mule
-  xmlns:http="http://www.mulesoft.org/schema/mule/http"
-  xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
-  xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
-  xmlns="http://www.mulesoft.org/schema/mule/core"
-  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
-  xsi:schemaLocation="
-    http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
-    http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
-    http://www.mulesoft.org/schema/mule/munit-tools  http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
-http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
-http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
-http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mule/validation/current/mule-validation.xsd">
-  <munit:config name="impl-option-a-test-suite.xml" />
+# Add HTTP Error Scenario
+
+## Purpose
+Create or update scenarios only, using realistic connector-like error simulation.
+
+## Project References
+
+
+```xml
+<munit:enable-flow-sources>
+  <munit:enable-flow-source
+    value="munit-util-mock-http-error-with-errorMessage-test-suite.http-listener-for-mock-responses" />
+  <munit:enable-flow-source
+    value="munit-util-mock-http-error-with-errorMessage-test-suite.trigger-mock-http-request" />
+</munit:enable-flow-sources>
+```
+
+```xml
+<munit-tools:then-call
+          flow="impl-test-suite.mock-http-req-external-400.flow" />
+```
+
+So, it's important to enable the flows (Listener or any other) that will be used in the test and for each Mock it will have a Flow in then call option
+⚠️ The flow mentioned in the mock then call option doesn't need to be enabled in the MUnit test case.
+
+ℹ️ You may think at *Import* the file that has the Flows that are used in the MUnit tests, but this doesn't work very well during the MUnit Test Run, so avoid this approach:
+
+```xml
+<import
+    doc:name="Import"
+    file="option-a\munit-util-mock-http-request-for-errorMessage-using-listener-localhost-test-suite.xml"
+    doc:description="munit-util-mock-http-request-for-errorMessage-using-listener-localhost-test-suite.xml" />
+```
+
+Otherwise will get an error like:
+
+```bash
+org.mule.runtime.api.exception.MuleRuntimeException: org.mule.runtime.core.api.config.ConfigurationException: [munit-util-mock-http-request-for-errorMessage-using-listener-localhost-test-suite.xml:27; option-a\munit-util-mock-http-request-for-errorMessage-using-listener-localhost-test-suite.xml:27]: Two (or more) configuration elements have been defined with the same global name. Global name 'MUnit_HTTP_Listener_config' must be unique.
+'munit-util-mock-http-error-with-errorMessage-test-suite.http-listener-for-mock-responses' must be unique.
+[option-a/munit-util-mock-http-request-for-errorMessage-using-listener-localhost-test-suite.xml:67; option-a\munit-util-mock-http-request-for-errorMessage-using-listener-localhost-test-suite.xml:67]:
+----
+
+**Dynamic Port**
+
+One or more options may use dynamic port feature from MUnit, the official documentation is available on [Dynamic Ports | MuleSoft Documentation](https://docs.mulesoft.com/munit/latest/dynamic-ports). Feel free to take a look.
+
+**Reference Guide: Deep Dive into Options**
+This section provides a detailed breakdown of each of the four testing strategies.
+
+**Realistic Mocking with a Utility HTTP Listener**
+
+This is the recommended approach for its balance of realism, reusability, and fine-grained control over the mocked error.
+
+See also this Stack Overflow question related to this approach: https://stackoverflow.com/questions/78878885/munits-and-error-handling-how-to-mock-error-error-mulemessage
+
+**Approach**
+
+The core idea is to intercept an outbound `http:request` using a `mock-when` processor and, instead of returning a simple value, redirect the execution to a utility flow within the MUnit test suite using `then-call`.
+
+This utility flow then makes a real HTTP request to a real HTTP listener that is also running as part of the MUnit test on a dynamic port.
+
+This listener is strategically configured to generate a specific HTTP error response (status code, payload, headers). The HTTP connector within the utility flow receives this error response and naturally throws a standard Mule error, which is then propagated back through the mock.
+
+This process creates a highly realistic, fully-structured error object for your test to validate, perfectly mimicking how the connector behaves in a production environment.
+
+**Diagrams**
+
+```mermaid
+sequenceDiagram
+    participant Test as MUnit Test
+    participant Flow as Flow Under Test
+    participant Mock as Mock When (http:request)
+    participant Util as Flow to Mock HTTP Response
+    participant Listener as MUnit HTTP Listener
+
+    Test->>Flow: Execute Flow Ref
+    Flow->>Mock: HTTP Request to external system
+    Mock->>Util: then-call utility flow
+    Util->>Listener: Makes REAL HTTP request
+    Listener-->>Util: Responds with error (e.g., 400 Bad Request + payload)
+    Util-->>Mock: Propagates HTTP Connector error
+    Mock-->>Flow: Throws realistic error object
+    Flow->>Flow: Enters on-error-continue/propagate scope
+    Test->>Flow: Verify behavior in error handler
+```
+
+**Code Analysis**
+
+The implementation utilizes two main flows that can be reused for each munit test case, it's important to mention that for each HTTP Request that you want to mock as error you will need to create or reference a respective flow that defines the structure (status code, payload, headers) you want to thrown.
+
+```xml
+<mule ...>
+
+  <munit:config name="mule-configuration.xml" />
 
   <!-- 1. A dynamic port is reserved for the test listener to avoid conflicts. -->
   <munit:dynamic-port
@@ -63,7 +146,6 @@ http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mu
         </http:headers>
       </http:error-response>
     </http:listener>
-
     <logger
       level="TRACE"
       doc:name="doc: Listener Response will Return the payload/http status for the respective request that was made to mock" />
@@ -295,117 +377,29 @@ output application/json indent=false
       name="munit-util-mock-http-error.req-based-on-vars.munitHttp" />
   </flow>
 
-
-  <!-- New test case for HTTP 422 - Unprocessable Entity downstream API error -->
-  <munit:test
-    name="impl-test-suite-downstream-api-422-unprocessable-entity-test"
-    timeOut="900000"
-    doc:name="Downstream API returns 422 Unprocessable Entity" expectedErrorType="MULE:UNKNOWN">
-    <!-- Enable the utility flows for mocking -->
-    <munit:enable-flow-sources>
-      <munit:enable-flow-source
-        value="munit-util-mock-http-error.req-based-on-vars.munitHttp" />
-      <munit:enable-flow-source
-        value="munit-util-mock-http-error.listener" />
-    </munit:enable-flow-sources>
-    <munit:behavior>
-      <!-- Mock the /process endpoint to return 422 instead of 200 -->
-      <munit-tools:mock-when
-        doc:name="Mock HTTP Req Process -&gt; then call flow 422"
-        processor="http:request">
-        <munit-tools:with-attributes>
-          <munit-tools:with-attribute
-            whereValue="GET"
-            attributeName="method" />
-          <munit-tools:with-attribute
-            whereValue="http://example.com/process"
-            attributeName="url" />
-        </munit-tools:with-attributes>
-        <munit-tools:then-call
-          flow="impl-test-suite.mock-http-req-process-422.flow" />
-      </munit-tools:mock-when>
-      <!-- Keep other mocks with default responses -->
-      <munit-tools:mock-when
-        doc:name="Mock HTTP Req External -&gt; then call flow 400"
-        processor="http:request">
-        <munit-tools:with-attributes>
-          <munit-tools:with-attribute
-            whereValue="GET"
-            attributeName="method" />
-          <munit-tools:with-attribute
-            whereValue="http://example.com/external"
-            attributeName="url" />
-        </munit-tools:with-attributes>
-        <munit-tools:then-call
-          flow="impl-test-suite.mock-http-req-external-400.flow" />
-      </munit-tools:mock-when>
-      <munit-tools:mock-when
-        doc:name="Mock HTTP Req System -&gt; then call flow 503"
-        processor="http:request">
-        <munit-tools:with-attributes>
-          <munit-tools:with-attribute
-            whereValue="GET"
-            attributeName="method" />
-          <munit-tools:with-attribute
-            whereValue="http://example.com/system"
-            attributeName="url" />
-        </munit-tools:with-attributes>
-        <munit-tools:then-call
-          flow="impl-test-suite.mock-http-req-system-503.flow" />
-      </munit-tools:mock-when>
-    </munit:behavior>
-    <!-- Execute the flow under test -->
-    <munit:execution>
-      <flow-ref
-        doc:name="Flow-ref to impl-for-option-a.subflow"
-        name="impl-for-option-a" />
-    </munit:execution>
-    <!-- Validate that the flow handled the error correctly -->
-  </munit:test>
-
-
-  <!-- Helper flow for setting up 422 mock response -->
-  <flow name="impl-test-suite.mock-http-req-process-422.flow">
-    <ee:transform
-      doc:name="munitHttp {queryParams: statusCode: 422} ; munitBody ;"
-      doc:id="f1c3a8d9-e2f4-4c1a-b8d9-7e6f5c8a9b1d">
-      <ee:message></ee:message>
-      <ee:variables>
-        <!-- This variable will become the body of the 422 error response -->
-        <ee:set-variable variableName="munitBody">
-          <![CDATA[%dw 2.0 output application/json --- {
-  message: "Unprocessable Entity",
-  errors: [
-    {
-      field: "email",
-      message: "Invalid email format"
-    },
-    {
-      field: "age",
-      message: "Age must be between 18 and 120"
-    }
-  ]
-}]]>
-        </ee:set-variable>
-        <!-- Pass the 422 status code to the listener via query parameters -->
-        <ee:set-variable variableName="munitHttp">
-          <![CDATA[%dw 2.0 output application/java ---
-{
-  path  : "/",
-  method: "GET",
-  queryParams: {
-    statusCode: 422,
-    reasonPhrase: "Unprocessable Entity"
-  },
-}]]>
-        </ee:set-variable>
-      </ee:variables>
-    </ee:transform>
-    <!-- Trigger the mock listener -->
-    <flow-ref
-      doc:name="FlowRef req-based-on-vars.munitHttp-flow"
-      name="munit-util-mock-http-error.req-based-on-vars.munitHttp" />
-  </flow>
-
-
 </mule>
+```
+
+
+
+## Procedure
+1. Review existing runtime and test flow names and selectors.
+2. Add or update runtime branch logic in flow:
+   - status code condition
+   - payload condition if needed
+   - branch-specific behavior
+3. Add or update MUnit behavior:
+   - mock-when for target request
+   - then-call to scenario helper flow
+   - helper variables for payload and status
+   - helper flow-ref to reusable request trigger
+4. Ensure required helper flow sources are enabled in the test.
+5. Add assertions that prove branch behavior and outcome.
+6. Confirm selector alignment between runtime requests and test mocks.
+
+## Quality Checklist
+- Runtime and test files both updated.
+- Dynamic port listener pattern preserved.
+- No duplicate global config naming conflicts introduced.
+- Assertions verify intended branch execution and final behavior.
+- Changes remain inside the scope unless explicitly requested otherwise.
