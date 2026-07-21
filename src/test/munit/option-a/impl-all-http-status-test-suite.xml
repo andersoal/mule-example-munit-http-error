@@ -1,0 +1,951 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule
+  xmlns:http="http://www.mulesoft.org/schema/mule/http"
+  xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+  xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+  xmlns="http://www.mulesoft.org/schema/mule/core"
+  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+  xsi:schemaLocation="
+    http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+    http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+    http://www.mulesoft.org/schema/mule/munit-tools  http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+  <munit:config name="impl-all-http-status-test-suite.xml" />
+
+  <!-- Same Option A technique (a real local HTTP listener acting as mock server),
+       but with one dedicated munit:test per HTTP status code so each is simulated
+       and asserted independently. -->
+  <munit:dynamic-port
+    propertyName="munit.dynamic.port.all-status"
+    min="6000"
+    max="7000" />
+
+  <http:listener-config
+    name="MUnit_AllStatus_HTTP_Listener_config"
+    doc:name="HTTP Listener config">
+    <http:listener-connection
+      host="0.0.0.0"
+      port="${munit.dynamic.port.all-status}" />
+  </http:listener-config>
+
+  <http:request-config name="MUnit_AllStatus_HTTP_Request_configuration">
+    <http:request-connection
+      host="localhost"
+      port="${munit.dynamic.port.all-status}" />
+  </http:request-config>
+
+  <!-- Mock server: returns whatever status code arrives via query params. -->
+  <flow name="munit-util-mock-http-all-status.listener">
+    <http:listener
+      doc:name="Listener"
+      config-ref="MUnit_AllStatus_HTTP_Listener_config"
+      path="/*">
+      <http:response
+        statusCode="#[(attributes.queryParams.statusCode default attributes.queryParams.httpStatus) default 200]"
+        reasonPhrase="#[attributes.queryParams.reasonPhrase]">
+        <http:headers>
+          <![CDATA[#[attributes.headers]]]>
+        </http:headers>
+      </http:response>
+      <http:error-response
+        statusCode="#[(attributes.queryParams.statusCode default attributes.queryParams.httpStatus) default 500]"
+        reasonPhrase="#[attributes.queryParams.reasonPhrase]">
+        <http:body>
+          <![CDATA[#[payload]]]>
+        </http:body>
+        <http:headers>
+          <![CDATA[#[attributes.headers]]]>
+        </http:headers>
+      </http:error-response>
+    </http:listener>
+    <logger
+      level="TRACE"
+      doc:name="doc: Listener echoes the request payload with the requested HTTP status" />
+  </flow>
+
+  <!-- ============================= -->
+  <!-- Success codes: 200, 201, 204, 209 -->
+  <!-- Returned by the requester as regular (non-error) responses. -->
+  <!-- ============================= -->
+
+  <munit:test
+    name="impl-all-http-status-200-Test"
+    timeOut="900000">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-all-status.listener" />
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <http:request
+        config-ref="MUnit_AllStatus_HTTP_Request_configuration"
+        method="GET"
+        doc:name="HTTP Req to mock listener (200)"
+        path="/">
+        <http:query-params>
+          <![CDATA[#[{ statusCode: 200 }]]]>
+        </http:query-params>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that
+        doc:name="Status code is 200"
+        expression="#[attributes.statusCode]"
+        is="#[MunitTools::equalTo(200)]" />
+    </munit:validation>
+  </munit:test>
+
+  <munit:test
+    name="impl-all-http-status-201-Test"
+    timeOut="900000">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-all-status.listener" />
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <http:request
+        config-ref="MUnit_AllStatus_HTTP_Request_configuration"
+        method="GET"
+        doc:name="HTTP Req to mock listener (201)"
+        path="/">
+        <http:query-params>
+          <![CDATA[#[{ statusCode: 201 }]]]>
+        </http:query-params>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that
+        doc:name="Status code is 201"
+        expression="#[attributes.statusCode]"
+        is="#[MunitTools::equalTo(201)]" />
+    </munit:validation>
+  </munit:test>
+
+  <munit:test
+    name="impl-all-http-status-204-Test"
+    timeOut="900000">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-all-status.listener" />
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <http:request
+        config-ref="MUnit_AllStatus_HTTP_Request_configuration"
+        method="GET"
+        doc:name="HTTP Req to mock listener (204)"
+        path="/">
+        <http:query-params>
+          <![CDATA[#[{ statusCode: 204 }]]]>
+        </http:query-params>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that
+        doc:name="Status code is 204"
+        expression="#[attributes.statusCode]"
+        is="#[MunitTools::equalTo(204)]" />
+    </munit:validation>
+  </munit:test>
+
+  <munit:test
+    name="impl-all-http-status-209-Test"
+    timeOut="900000">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-all-status.listener" />
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <http:request
+        config-ref="MUnit_AllStatus_HTTP_Request_configuration"
+        method="GET"
+        doc:name="HTTP Req to mock listener (209)"
+        path="/">
+        <http:query-params>
+          <![CDATA[#[{ statusCode: 209 }]]]>
+        </http:query-params>
+      </http:request>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that
+        doc:name="Status code is 209"
+        expression="#[attributes.statusCode]"
+        is="#[MunitTools::equalTo(209)]" />
+    </munit:validation>
+  </munit:test>
+
+  <!-- ============================= -->
+  <!-- Error codes: 400, 401, 403, 404, 405, 409, 410, 415, 422, 429, 500, 502, 503, 504, 511 -->
+  <!-- Each raises a real Mule error on the requester side, exactly like a failing
+       external system would. The error handler captures the status code and error
+       type into variables, since `error` isn't reachable from munit:validation. -->
+  <!-- ============================= -->
+
+  <munit:test
+    name="impl-all-http-status-400-Test"
+    timeOut="900000">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-all-status.listener" />
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <try doc:name="Try">
+        <http:request
+          config-ref="MUnit_AllStatus_HTTP_Request_configuration"
+          method="GET"
+          doc:name="HTTP Req to mock listener (400)"
+          path="/">
+          <http:query-params>
+            <![CDATA[#[{ statusCode: 400 }]]]>
+          </http:query-params>
+        </http:request>
+        <error-handler>
+          <on-error-continue
+            enableNotifications="false"
+            logException="false"
+            doc:name="Capture simulated HTTP error">
+            <set-variable
+              doc:name="capturedStatusCode"
+              variableName="capturedStatusCode"
+              value="#[error.errorMessage.attributes.statusCode]" />
+            <set-variable
+              doc:name="capturedErrorType"
+              variableName="capturedErrorType"
+              value="#[(error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default '')]" />
+            <logger
+              level="INFO"
+              doc:name="Log simulated error"
+              message="#[output application/json --- { expected: 400, statusCode: vars.capturedStatusCode, errorType: vars.capturedErrorType }]" />
+          </on-error-continue>
+        </error-handler>
+      </try>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that
+        doc:name="Error raised with statusCode 400"
+        expression="#[vars.capturedStatusCode]"
+        is="#[MunitTools::equalTo(400)]" />
+      <munit-tools:assert-that
+        doc:name="Error type was captured"
+        expression="#[vars.capturedErrorType]"
+        is="#[MunitTools::notNullValue()]" />
+    </munit:validation>
+  </munit:test>
+
+  <munit:test
+    name="impl-all-http-status-401-Test"
+    timeOut="900000">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-all-status.listener" />
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <try doc:name="Try">
+        <http:request
+          config-ref="MUnit_AllStatus_HTTP_Request_configuration"
+          method="GET"
+          doc:name="HTTP Req to mock listener (401)"
+          path="/">
+          <http:query-params>
+            <![CDATA[#[{ statusCode: 401 }]]]>
+          </http:query-params>
+        </http:request>
+        <error-handler>
+          <on-error-continue
+            enableNotifications="false"
+            logException="false"
+            doc:name="Capture simulated HTTP error">
+            <set-variable
+              doc:name="capturedStatusCode"
+              variableName="capturedStatusCode"
+              value="#[error.errorMessage.attributes.statusCode]" />
+            <set-variable
+              doc:name="capturedErrorType"
+              variableName="capturedErrorType"
+              value="#[(error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default '')]" />
+            <logger
+              level="INFO"
+              doc:name="Log simulated error"
+              message="#[output application/json --- { expected: 401, statusCode: vars.capturedStatusCode, errorType: vars.capturedErrorType }]" />
+          </on-error-continue>
+        </error-handler>
+      </try>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that
+        doc:name="Error raised with statusCode 401"
+        expression="#[vars.capturedStatusCode]"
+        is="#[MunitTools::equalTo(401)]" />
+      <munit-tools:assert-that
+        doc:name="Error type was captured"
+        expression="#[vars.capturedErrorType]"
+        is="#[MunitTools::notNullValue()]" />
+    </munit:validation>
+  </munit:test>
+
+  <munit:test
+    name="impl-all-http-status-403-Test"
+    timeOut="900000">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-all-status.listener" />
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <try doc:name="Try">
+        <http:request
+          config-ref="MUnit_AllStatus_HTTP_Request_configuration"
+          method="GET"
+          doc:name="HTTP Req to mock listener (403)"
+          path="/">
+          <http:query-params>
+            <![CDATA[#[{ statusCode: 403 }]]]>
+          </http:query-params>
+        </http:request>
+        <error-handler>
+          <on-error-continue
+            enableNotifications="false"
+            logException="false"
+            doc:name="Capture simulated HTTP error">
+            <set-variable
+              doc:name="capturedStatusCode"
+              variableName="capturedStatusCode"
+              value="#[error.errorMessage.attributes.statusCode]" />
+            <set-variable
+              doc:name="capturedErrorType"
+              variableName="capturedErrorType"
+              value="#[(error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default '')]" />
+            <logger
+              level="INFO"
+              doc:name="Log simulated error"
+              message="#[output application/json --- { expected: 403, statusCode: vars.capturedStatusCode, errorType: vars.capturedErrorType }]" />
+          </on-error-continue>
+        </error-handler>
+      </try>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that
+        doc:name="Error raised with statusCode 403"
+        expression="#[vars.capturedStatusCode]"
+        is="#[MunitTools::equalTo(403)]" />
+      <munit-tools:assert-that
+        doc:name="Error type was captured"
+        expression="#[vars.capturedErrorType]"
+        is="#[MunitTools::notNullValue()]" />
+    </munit:validation>
+  </munit:test>
+
+  <munit:test
+    name="impl-all-http-status-404-Test"
+    timeOut="900000">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-all-status.listener" />
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <try doc:name="Try">
+        <http:request
+          config-ref="MUnit_AllStatus_HTTP_Request_configuration"
+          method="GET"
+          doc:name="HTTP Req to mock listener (404)"
+          path="/">
+          <http:query-params>
+            <![CDATA[#[{ statusCode: 404 }]]]>
+          </http:query-params>
+        </http:request>
+        <error-handler>
+          <on-error-continue
+            enableNotifications="false"
+            logException="false"
+            doc:name="Capture simulated HTTP error">
+            <set-variable
+              doc:name="capturedStatusCode"
+              variableName="capturedStatusCode"
+              value="#[error.errorMessage.attributes.statusCode]" />
+            <set-variable
+              doc:name="capturedErrorType"
+              variableName="capturedErrorType"
+              value="#[(error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default '')]" />
+            <logger
+              level="INFO"
+              doc:name="Log simulated error"
+              message="#[output application/json --- { expected: 404, statusCode: vars.capturedStatusCode, errorType: vars.capturedErrorType }]" />
+          </on-error-continue>
+        </error-handler>
+      </try>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that
+        doc:name="Error raised with statusCode 404"
+        expression="#[vars.capturedStatusCode]"
+        is="#[MunitTools::equalTo(404)]" />
+      <munit-tools:assert-that
+        doc:name="Error type was captured"
+        expression="#[vars.capturedErrorType]"
+        is="#[MunitTools::notNullValue()]" />
+    </munit:validation>
+  </munit:test>
+
+  <munit:test
+    name="impl-all-http-status-405-Test"
+    timeOut="900000">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-all-status.listener" />
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <try doc:name="Try">
+        <http:request
+          config-ref="MUnit_AllStatus_HTTP_Request_configuration"
+          method="GET"
+          doc:name="HTTP Req to mock listener (405)"
+          path="/">
+          <http:query-params>
+            <![CDATA[#[{ statusCode: 405 }]]]>
+          </http:query-params>
+        </http:request>
+        <error-handler>
+          <on-error-continue
+            enableNotifications="false"
+            logException="false"
+            doc:name="Capture simulated HTTP error">
+            <set-variable
+              doc:name="capturedStatusCode"
+              variableName="capturedStatusCode"
+              value="#[error.errorMessage.attributes.statusCode]" />
+            <set-variable
+              doc:name="capturedErrorType"
+              variableName="capturedErrorType"
+              value="#[(error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default '')]" />
+            <logger
+              level="INFO"
+              doc:name="Log simulated error"
+              message="#[output application/json --- { expected: 405, statusCode: vars.capturedStatusCode, errorType: vars.capturedErrorType }]" />
+          </on-error-continue>
+        </error-handler>
+      </try>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that
+        doc:name="Error raised with statusCode 405"
+        expression="#[vars.capturedStatusCode]"
+        is="#[MunitTools::equalTo(405)]" />
+      <munit-tools:assert-that
+        doc:name="Error type was captured"
+        expression="#[vars.capturedErrorType]"
+        is="#[MunitTools::notNullValue()]" />
+    </munit:validation>
+  </munit:test>
+
+  <munit:test
+    name="impl-all-http-status-409-Test"
+    timeOut="900000">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-all-status.listener" />
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <try doc:name="Try">
+        <http:request
+          config-ref="MUnit_AllStatus_HTTP_Request_configuration"
+          method="GET"
+          doc:name="HTTP Req to mock listener (409)"
+          path="/">
+          <http:query-params>
+            <![CDATA[#[{ statusCode: 409 }]]]>
+          </http:query-params>
+        </http:request>
+        <error-handler>
+          <on-error-continue
+            enableNotifications="false"
+            logException="false"
+            doc:name="Capture simulated HTTP error">
+            <set-variable
+              doc:name="capturedStatusCode"
+              variableName="capturedStatusCode"
+              value="#[error.errorMessage.attributes.statusCode]" />
+            <set-variable
+              doc:name="capturedErrorType"
+              variableName="capturedErrorType"
+              value="#[(error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default '')]" />
+            <logger
+              level="INFO"
+              doc:name="Log simulated error"
+              message="#[output application/json --- { expected: 409, statusCode: vars.capturedStatusCode, errorType: vars.capturedErrorType }]" />
+          </on-error-continue>
+        </error-handler>
+      </try>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that
+        doc:name="Error raised with statusCode 409"
+        expression="#[vars.capturedStatusCode]"
+        is="#[MunitTools::equalTo(409)]" />
+      <munit-tools:assert-that
+        doc:name="Error type was captured"
+        expression="#[vars.capturedErrorType]"
+        is="#[MunitTools::notNullValue()]" />
+    </munit:validation>
+  </munit:test>
+
+  <munit:test
+    name="impl-all-http-status-410-Test"
+    timeOut="900000">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-all-status.listener" />
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <try doc:name="Try">
+        <http:request
+          config-ref="MUnit_AllStatus_HTTP_Request_configuration"
+          method="GET"
+          doc:name="HTTP Req to mock listener (410)"
+          path="/">
+          <http:query-params>
+            <![CDATA[#[{ statusCode: 410 }]]]>
+          </http:query-params>
+        </http:request>
+        <error-handler>
+          <on-error-continue
+            enableNotifications="false"
+            logException="false"
+            doc:name="Capture simulated HTTP error">
+            <set-variable
+              doc:name="capturedStatusCode"
+              variableName="capturedStatusCode"
+              value="#[error.errorMessage.attributes.statusCode]" />
+            <set-variable
+              doc:name="capturedErrorType"
+              variableName="capturedErrorType"
+              value="#[(error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default '')]" />
+            <logger
+              level="INFO"
+              doc:name="Log simulated error"
+              message="#[output application/json --- { expected: 410, statusCode: vars.capturedStatusCode, errorType: vars.capturedErrorType }]" />
+          </on-error-continue>
+        </error-handler>
+      </try>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that
+        doc:name="Error raised with statusCode 410"
+        expression="#[vars.capturedStatusCode]"
+        is="#[MunitTools::equalTo(410)]" />
+      <munit-tools:assert-that
+        doc:name="Error type was captured"
+        expression="#[vars.capturedErrorType]"
+        is="#[MunitTools::notNullValue()]" />
+    </munit:validation>
+  </munit:test>
+
+  <munit:test
+    name="impl-all-http-status-415-Test"
+    timeOut="900000">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-all-status.listener" />
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <try doc:name="Try">
+        <http:request
+          config-ref="MUnit_AllStatus_HTTP_Request_configuration"
+          method="GET"
+          doc:name="HTTP Req to mock listener (415)"
+          path="/">
+          <http:query-params>
+            <![CDATA[#[{ statusCode: 415 }]]]>
+          </http:query-params>
+        </http:request>
+        <error-handler>
+          <on-error-continue
+            enableNotifications="false"
+            logException="false"
+            doc:name="Capture simulated HTTP error">
+            <set-variable
+              doc:name="capturedStatusCode"
+              variableName="capturedStatusCode"
+              value="#[error.errorMessage.attributes.statusCode]" />
+            <set-variable
+              doc:name="capturedErrorType"
+              variableName="capturedErrorType"
+              value="#[(error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default '')]" />
+            <logger
+              level="INFO"
+              doc:name="Log simulated error"
+              message="#[output application/json --- { expected: 415, statusCode: vars.capturedStatusCode, errorType: vars.capturedErrorType }]" />
+          </on-error-continue>
+        </error-handler>
+      </try>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that
+        doc:name="Error raised with statusCode 415"
+        expression="#[vars.capturedStatusCode]"
+        is="#[MunitTools::equalTo(415)]" />
+      <munit-tools:assert-that
+        doc:name="Error type was captured"
+        expression="#[vars.capturedErrorType]"
+        is="#[MunitTools::notNullValue()]" />
+    </munit:validation>
+  </munit:test>
+
+  <munit:test
+    name="impl-all-http-status-422-Test"
+    timeOut="900000">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-all-status.listener" />
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <try doc:name="Try">
+        <http:request
+          config-ref="MUnit_AllStatus_HTTP_Request_configuration"
+          method="GET"
+          doc:name="HTTP Req to mock listener (422)"
+          path="/">
+          <http:query-params>
+            <![CDATA[#[{ statusCode: 422 }]]]>
+          </http:query-params>
+        </http:request>
+        <error-handler>
+          <on-error-continue
+            enableNotifications="false"
+            logException="false"
+            doc:name="Capture simulated HTTP error">
+            <set-variable
+              doc:name="capturedStatusCode"
+              variableName="capturedStatusCode"
+              value="#[error.errorMessage.attributes.statusCode]" />
+            <set-variable
+              doc:name="capturedErrorType"
+              variableName="capturedErrorType"
+              value="#[(error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default '')]" />
+            <logger
+              level="INFO"
+              doc:name="Log simulated error"
+              message="#[output application/json --- { expected: 422, statusCode: vars.capturedStatusCode, errorType: vars.capturedErrorType }]" />
+          </on-error-continue>
+        </error-handler>
+      </try>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that
+        doc:name="Error raised with statusCode 422"
+        expression="#[vars.capturedStatusCode]"
+        is="#[MunitTools::equalTo(422)]" />
+      <munit-tools:assert-that
+        doc:name="Error type was captured"
+        expression="#[vars.capturedErrorType]"
+        is="#[MunitTools::notNullValue()]" />
+    </munit:validation>
+  </munit:test>
+
+  <munit:test
+    name="impl-all-http-status-429-Test"
+    timeOut="900000">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-all-status.listener" />
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <try doc:name="Try">
+        <http:request
+          config-ref="MUnit_AllStatus_HTTP_Request_configuration"
+          method="GET"
+          doc:name="HTTP Req to mock listener (429)"
+          path="/">
+          <http:query-params>
+            <![CDATA[#[{ statusCode: 429 }]]]>
+          </http:query-params>
+        </http:request>
+        <error-handler>
+          <on-error-continue
+            enableNotifications="false"
+            logException="false"
+            doc:name="Capture simulated HTTP error">
+            <set-variable
+              doc:name="capturedStatusCode"
+              variableName="capturedStatusCode"
+              value="#[error.errorMessage.attributes.statusCode]" />
+            <set-variable
+              doc:name="capturedErrorType"
+              variableName="capturedErrorType"
+              value="#[(error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default '')]" />
+            <logger
+              level="INFO"
+              doc:name="Log simulated error"
+              message="#[output application/json --- { expected: 429, statusCode: vars.capturedStatusCode, errorType: vars.capturedErrorType }]" />
+          </on-error-continue>
+        </error-handler>
+      </try>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that
+        doc:name="Error raised with statusCode 429"
+        expression="#[vars.capturedStatusCode]"
+        is="#[MunitTools::equalTo(429)]" />
+      <munit-tools:assert-that
+        doc:name="Error type was captured"
+        expression="#[vars.capturedErrorType]"
+        is="#[MunitTools::notNullValue()]" />
+    </munit:validation>
+  </munit:test>
+
+  <munit:test
+    name="impl-all-http-status-500-Test"
+    timeOut="900000">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-all-status.listener" />
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <try doc:name="Try">
+        <http:request
+          config-ref="MUnit_AllStatus_HTTP_Request_configuration"
+          method="GET"
+          doc:name="HTTP Req to mock listener (500)"
+          path="/">
+          <http:query-params>
+            <![CDATA[#[{ statusCode: 500 }]]]>
+          </http:query-params>
+        </http:request>
+        <error-handler>
+          <on-error-continue
+            enableNotifications="false"
+            logException="false"
+            doc:name="Capture simulated HTTP error">
+            <set-variable
+              doc:name="capturedStatusCode"
+              variableName="capturedStatusCode"
+              value="#[error.errorMessage.attributes.statusCode]" />
+            <set-variable
+              doc:name="capturedErrorType"
+              variableName="capturedErrorType"
+              value="#[(error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default '')]" />
+            <logger
+              level="INFO"
+              doc:name="Log simulated error"
+              message="#[output application/json --- { expected: 500, statusCode: vars.capturedStatusCode, errorType: vars.capturedErrorType }]" />
+          </on-error-continue>
+        </error-handler>
+      </try>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that
+        doc:name="Error raised with statusCode 500"
+        expression="#[vars.capturedStatusCode]"
+        is="#[MunitTools::equalTo(500)]" />
+      <munit-tools:assert-that
+        doc:name="Error type was captured"
+        expression="#[vars.capturedErrorType]"
+        is="#[MunitTools::notNullValue()]" />
+    </munit:validation>
+  </munit:test>
+
+  <munit:test
+    name="impl-all-http-status-502-Test"
+    timeOut="900000">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-all-status.listener" />
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <try doc:name="Try">
+        <http:request
+          config-ref="MUnit_AllStatus_HTTP_Request_configuration"
+          method="GET"
+          doc:name="HTTP Req to mock listener (502)"
+          path="/">
+          <http:query-params>
+            <![CDATA[#[{ statusCode: 502 }]]]>
+          </http:query-params>
+        </http:request>
+        <error-handler>
+          <on-error-continue
+            enableNotifications="false"
+            logException="false"
+            doc:name="Capture simulated HTTP error">
+            <set-variable
+              doc:name="capturedStatusCode"
+              variableName="capturedStatusCode"
+              value="#[error.errorMessage.attributes.statusCode]" />
+            <set-variable
+              doc:name="capturedErrorType"
+              variableName="capturedErrorType"
+              value="#[(error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default '')]" />
+            <logger
+              level="INFO"
+              doc:name="Log simulated error"
+              message="#[output application/json --- { expected: 502, statusCode: vars.capturedStatusCode, errorType: vars.capturedErrorType }]" />
+          </on-error-continue>
+        </error-handler>
+      </try>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that
+        doc:name="Error raised with statusCode 502"
+        expression="#[vars.capturedStatusCode]"
+        is="#[MunitTools::equalTo(502)]" />
+      <munit-tools:assert-that
+        doc:name="Error type was captured"
+        expression="#[vars.capturedErrorType]"
+        is="#[MunitTools::notNullValue()]" />
+    </munit:validation>
+  </munit:test>
+
+  <munit:test
+    name="impl-all-http-status-503-Test"
+    timeOut="900000">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-all-status.listener" />
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <try doc:name="Try">
+        <http:request
+          config-ref="MUnit_AllStatus_HTTP_Request_configuration"
+          method="GET"
+          doc:name="HTTP Req to mock listener (503)"
+          path="/">
+          <http:query-params>
+            <![CDATA[#[{ statusCode: 503 }]]]>
+          </http:query-params>
+        </http:request>
+        <error-handler>
+          <on-error-continue
+            enableNotifications="false"
+            logException="false"
+            doc:name="Capture simulated HTTP error">
+            <set-variable
+              doc:name="capturedStatusCode"
+              variableName="capturedStatusCode"
+              value="#[error.errorMessage.attributes.statusCode]" />
+            <set-variable
+              doc:name="capturedErrorType"
+              variableName="capturedErrorType"
+              value="#[(error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default '')]" />
+            <logger
+              level="INFO"
+              doc:name="Log simulated error"
+              message="#[output application/json --- { expected: 503, statusCode: vars.capturedStatusCode, errorType: vars.capturedErrorType }]" />
+          </on-error-continue>
+        </error-handler>
+      </try>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that
+        doc:name="Error raised with statusCode 503"
+        expression="#[vars.capturedStatusCode]"
+        is="#[MunitTools::equalTo(503)]" />
+      <munit-tools:assert-that
+        doc:name="Error type was captured"
+        expression="#[vars.capturedErrorType]"
+        is="#[MunitTools::notNullValue()]" />
+    </munit:validation>
+  </munit:test>
+
+  <munit:test
+    name="impl-all-http-status-504-Test"
+    timeOut="900000">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-all-status.listener" />
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <try doc:name="Try">
+        <http:request
+          config-ref="MUnit_AllStatus_HTTP_Request_configuration"
+          method="GET"
+          doc:name="HTTP Req to mock listener (504)"
+          path="/">
+          <http:query-params>
+            <![CDATA[#[{ statusCode: 504 }]]]>
+          </http:query-params>
+        </http:request>
+        <error-handler>
+          <on-error-continue
+            enableNotifications="false"
+            logException="false"
+            doc:name="Capture simulated HTTP error">
+            <set-variable
+              doc:name="capturedStatusCode"
+              variableName="capturedStatusCode"
+              value="#[error.errorMessage.attributes.statusCode]" />
+            <set-variable
+              doc:name="capturedErrorType"
+              variableName="capturedErrorType"
+              value="#[(error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default '')]" />
+            <logger
+              level="INFO"
+              doc:name="Log simulated error"
+              message="#[output application/json --- { expected: 504, statusCode: vars.capturedStatusCode, errorType: vars.capturedErrorType }]" />
+          </on-error-continue>
+        </error-handler>
+      </try>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that
+        doc:name="Error raised with statusCode 504"
+        expression="#[vars.capturedStatusCode]"
+        is="#[MunitTools::equalTo(504)]" />
+      <munit-tools:assert-that
+        doc:name="Error type was captured"
+        expression="#[vars.capturedErrorType]"
+        is="#[MunitTools::notNullValue()]" />
+    </munit:validation>
+  </munit:test>
+
+  <munit:test
+    name="impl-all-http-status-511-Test"
+    timeOut="900000">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-all-status.listener" />
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <try doc:name="Try">
+        <http:request
+          config-ref="MUnit_AllStatus_HTTP_Request_configuration"
+          method="GET"
+          doc:name="HTTP Req to mock listener (511)"
+          path="/">
+          <http:query-params>
+            <![CDATA[#[{ statusCode: 511 }]]]>
+          </http:query-params>
+        </http:request>
+        <error-handler>
+          <on-error-continue
+            enableNotifications="false"
+            logException="false"
+            doc:name="Capture simulated HTTP error">
+            <set-variable
+              doc:name="capturedStatusCode"
+              variableName="capturedStatusCode"
+              value="#[error.errorMessage.attributes.statusCode]" />
+            <set-variable
+              doc:name="capturedErrorType"
+              variableName="capturedErrorType"
+              value="#[(error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default '')]" />
+            <logger
+              level="INFO"
+              doc:name="Log simulated error"
+              message="#[output application/json --- { expected: 511, statusCode: vars.capturedStatusCode, errorType: vars.capturedErrorType }]" />
+          </on-error-continue>
+        </error-handler>
+      </try>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that
+        doc:name="Error raised with statusCode 511"
+        expression="#[vars.capturedStatusCode]"
+        is="#[MunitTools::equalTo(511)]" />
+      <munit-tools:assert-that
+        doc:name="Error type was captured"
+        expression="#[vars.capturedErrorType]"
+        is="#[MunitTools::notNullValue()]" />
+    </munit:validation>
+  </munit:test>
+
+</mule>
