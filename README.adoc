@@ -499,6 +499,25 @@ You need to explicitly tell MUnit to start all required flows for your test.
 *Solution:* Avoid using `<import>` in MUnit files. You can enable them as needed using `<munit:enable-flow-sources>`.
 ====
 
+[NOTE]
+.The error handler itself fails when the error body is `text/plain` or binary
+====
+*Cause:* An `on-error-continue`/`on-error-propagate` `when` expression (or any DataWeave in the handler) that uses a selector on the error body, such as `error.errorMessage.payload.message`, assumes the payload is an Object (parsed JSON). When the downstream system answers with a `text/plain` or binary body, the payload is a `String`/`Binary` and the selector raises an expression error — the error handler selection fails and the original error is masked by a confusing DataWeave failure. A `default ''` does not help: `default` only handles `null`, not a failing selector.
+
+*Solution:* Guard the expression with a type check before using selectors, e.g.:
+
+```dataweave
+( error.errorMessage.attributes.statusCode == 400 )
+  and ( error.errorMessage.payload is Object )
+  and ( (error.errorMessage.payload.message default '') contains 'Account already exists!' )
+```
+
+This is applied in `impl-for-option-a.xml`, and the regression test
+`impl-test-suite-text-plain-400-propagates-http-bad-request-Test` (in `impl-test-suite.xml`) mocks a
+400 response with a `text/plain` body and asserts that the original `HTTP:BAD_REQUEST` propagates
+instead of an expression failure.
+====
+
 ==== Screenshot Placeholders
 // Screenshot: The MUnit 'mock-when' configuration showing the 'then-call' pointing to the setup flow.
 // Screenshot: The 'munit-util-mock...' file showing the dynamic port, listener, and requester flows on the canvas.
