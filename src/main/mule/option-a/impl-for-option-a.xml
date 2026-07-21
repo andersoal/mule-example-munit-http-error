@@ -22,11 +22,16 @@
         sendBodyMode="ALWAYS"
         url="http://example.com/external" />
       <error-handler>
+        <!--
+          The payload type check keeps this `when` expression safe: when the error body is not JSON
+          (e.g. a text/plain or binary response), error.errorMessage.payload is a String/Binary and a
+          selector like `.message` on it fails the whole error handler instead of simply not matching.
+        -->
         <on-error-continue
           enableNotifications="true"
           logException="true"
           doc:name="On Error Continue"
-          when="#[ ( error.errorMessage.attributes.statusCode == 400 ) and ( error.errorMessage.payload.message contains 'Account already exists!' ) ]">
+          when="#[ ( error.errorMessage.attributes.statusCode == 400 ) and ( error.errorMessage.payload is Object ) and ( (error.errorMessage.payload.message default '') contains 'Account already exists!' ) ]">
           <logger
             level="ERROR"
             message="#[output application/json --- { tracepoint: 'EXCEPTION', }]"

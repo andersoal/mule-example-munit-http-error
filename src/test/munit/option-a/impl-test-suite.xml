@@ -230,6 +230,78 @@ http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mu
   </munit:test>
 
 
+  <!--
+    Edge case regression test: the external system answers 400 with a text/plain body instead of JSON.
+    Before the type guard in impl-for-option-a's `when` expression, evaluating
+    error.errorMessage.payload.message on a plain-text payload failed the error handler itself.
+    With the guard, the `when` simply does not match and the original HTTP:BAD_REQUEST propagates.
+  -->
+  <munit:test
+    name="impl-test-suite-text-plain-400-propagates-http-bad-request-Test"
+    timeOut="900000"
+    expectedErrorType="HTTP:BAD_REQUEST">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-error.req-based-on-vars.munitHttp" />
+      <munit:enable-flow-source
+        value="munit-util-mock-http-error.listener" />
+    </munit:enable-flow-sources>
+    <munit:behavior>
+      <munit-tools:mock-when
+        doc:name="Mock HTTP Req External -&gt; then call flow 400 text/plain ;"
+        processor="http:request">
+        <munit-tools:with-attributes>
+          <munit-tools:with-attribute
+            whereValue="GET"
+            attributeName="method" />
+          <munit-tools:with-attribute
+            whereValue="http://example.com/external"
+            attributeName="url" />
+        </munit-tools:with-attributes>
+        <munit-tools:then-call
+          flow="impl-test-suite.mock-http-req-external-400-text-plain.flow" />
+      </munit-tools:mock-when>
+    </munit:behavior>
+    <munit:execution>
+      <flow-ref
+        doc:name="Flow-ref to impl-for-option-a.subflow"
+        name="impl-for-option-a" />
+    </munit:execution>
+  </munit:test>
+
+
+  <!-- Setup flow for the text/plain 400 mock: a non-JSON error body with a matching message text. -->
+  <flow name="impl-test-suite.mock-http-req-external-400-text-plain.flow">
+    <ee:transform
+      doc:name="munitHttp {queryParams: {statusCode: 400}, headers: text/plain } ; munitBody plain text ;">
+      <ee:message></ee:message>
+      <ee:variables>
+        <!-- The body is intentionally NOT JSON: same message text, but a plain string. -->
+        <ee:set-variable variableName="munitBody">
+          <![CDATA[%dw 2.0 output text/plain --- "Account already exists!"]]>
+        </ee:set-variable>
+        <!-- The listener echoes the request headers, so the error response comes back as text/plain. -->
+        <ee:set-variable variableName="munitHttp">
+          <![CDATA[%dw 2.0 output application/java ---
+{
+  path  : "/",
+  method: "GET",
+  headers: {
+    "Content-Type": "text/plain"
+  },
+  queryParams: {
+    statusCode: 400,
+  },
+}]]>
+        </ee:set-variable>
+      </ee:variables>
+    </ee:transform>
+    <flow-ref
+      doc:name="FlowRef req-based-on-vars.munitHttp-flow"
+      name="munit-util-mock-http-error.req-based-on-vars.munitHttp" />
+  </flow>
+
+
   <!-- 7. This flow acts as a test-specific setup, preparing the data for the mock. -->
   <flow name="impl-test-suite.mock-http-req-external-400.flow">
     <ee:transform
