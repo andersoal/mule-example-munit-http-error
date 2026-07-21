@@ -1,0 +1,234 @@
+# =============================================================================
+# HTTP status -> Mule error type map: the data.
+#
+# One entry per IANA-registered HTTP status code (62) plus 418 (not registered,
+# but universally implemented) = 63 rows.
+#
+# Each row drives ONE run of `statusCodeProducesExpectedErrorType` in
+# impl-all-http-status-parameterized-test-suite.xml. The parameterization name
+# is what MUnit prints in the report, so a red row names its own status code.
+#
+# Fields:
+#   statusCode        the code the mock listener is asked to return
+#   expectedErrorType "<namespace>:<identifier>", or "" when no error is raised
+#
+# Seeding rule (see ../../../../../../CONTEXT.md, "Seed-and-Correct"):
+#   - named type   where MuleSoft documents one for that code
+#   - MULE:UNKNOWN for any 4xx/5xx with no named type (proven for 409/410/422/511)
+#   - ""           for 1xx/2xx/3xx, which are not expected to raise at all
+#
+# Rows marked PROVEN are already green in the longhand suite
+# (../impl-all-http-status-test-suite.xml). Every other row is a hypothesis
+# that the first run either confirms or corrects.
+# =============================================================================
+
+# --- 1xx informational --------------------------------------------------------
+# Interim responses are normally consumed by the transport layer and may never
+# reach the flow. If a row hangs or cannot be produced, delete it here and
+# footnote it in README.adoc - "not producible through a real listener" is a
+# finding, not a failure.
+"100-continue":
+  statusCode: "100"
+  expectedErrorType: ""
+"101-switching-protocols":
+  statusCode: "101"
+  expectedErrorType: ""
+"102-processing":
+  statusCode: "102"
+  expectedErrorType: ""
+"103-early-hints":
+  statusCode: "103"
+  expectedErrorType: ""
+
+# --- 2xx success --------------------------------------------------------------
+# The default response validator throws only at 400 and above, so all of these
+# are expected to return normally. 204/205/304 forbid a response body; the mock
+# listener echoes the request payload, so those are the rows most likely to
+# behave oddly.
+"200-ok":
+  statusCode: "200"
+  expectedErrorType: ""          # PROVEN
+"201-created":
+  statusCode: "201"
+  expectedErrorType: ""          # PROVEN
+"202-accepted":
+  statusCode: "202"
+  expectedErrorType: ""
+"203-non-authoritative-information":
+  statusCode: "203"
+  expectedErrorType: ""
+"204-no-content":
+  statusCode: "204"
+  expectedErrorType: ""          # PROVEN
+"205-reset-content":
+  statusCode: "205"
+  expectedErrorType: ""
+"206-partial-content":
+  statusCode: "206"
+  expectedErrorType: ""
+"207-multi-status":
+  statusCode: "207"
+  expectedErrorType: ""
+"208-already-reported":
+  statusCode: "208"
+  expectedErrorType: ""
+"226-im-used":
+  statusCode: "226"
+  expectedErrorType: ""
+
+# --- 3xx redirection ----------------------------------------------------------
+# followRedirects defaults to true, but the mock listener sends no Location
+# header, so there is nothing to follow: these are expected to surface as
+# ordinary non-error responses. See README.adoc for the followRedirects=false
+# contrast test.
+"300-multiple-choices":
+  statusCode: "300"
+  expectedErrorType: ""
+"301-moved-permanently":
+  statusCode: "301"
+  expectedErrorType: ""
+"302-found":
+  statusCode: "302"
+  expectedErrorType: ""
+"303-see-other":
+  statusCode: "303"
+  expectedErrorType: ""
+"304-not-modified":
+  statusCode: "304"
+  expectedErrorType: ""
+"305-use-proxy":
+  statusCode: "305"
+  expectedErrorType: ""
+"306-unused":
+  statusCode: "306"
+  expectedErrorType: ""
+"307-temporary-redirect":
+  statusCode: "307"
+  expectedErrorType: ""
+"308-permanent-redirect":
+  statusCode: "308"
+  expectedErrorType: ""
+
+# --- 4xx client errors --------------------------------------------------------
+"400-bad-request":
+  statusCode: "400"
+  expectedErrorType: "HTTP:BAD_REQUEST"            # PROVEN
+"401-unauthorized":
+  statusCode: "401"
+  expectedErrorType: "HTTP:UNAUTHORIZED"           # PROVEN
+"402-payment-required":
+  statusCode: "402"
+  expectedErrorType: "MULE:UNKNOWN"
+"403-forbidden":
+  statusCode: "403"
+  expectedErrorType: "HTTP:FORBIDDEN"              # PROVEN
+"404-not-found":
+  statusCode: "404"
+  expectedErrorType: "HTTP:NOT_FOUND"              # PROVEN + only doc-confirmed row
+"405-method-not-allowed":
+  statusCode: "405"
+  expectedErrorType: "HTTP:METHOD_NOT_ALLOWED"     # PROVEN
+"406-not-acceptable":
+  statusCode: "406"
+  expectedErrorType: "HTTP:NOT_ACCEPTABLE"         # gap in the longhand suite
+"407-proxy-authentication-required":
+  statusCode: "407"
+  expectedErrorType: "MULE:UNKNOWN"
+"408-request-timeout":
+  statusCode: "408"
+  expectedErrorType: "HTTP:TIMEOUT"                # contested - see README.adoc
+"409-conflict":
+  statusCode: "409"
+  expectedErrorType: "MULE:UNKNOWN"                # PROVEN - establishes the fallback
+"410-gone":
+  statusCode: "410"
+  expectedErrorType: "MULE:UNKNOWN"                # PROVEN
+"411-length-required":
+  statusCode: "411"
+  expectedErrorType: "MULE:UNKNOWN"
+"412-precondition-failed":
+  statusCode: "412"
+  expectedErrorType: "MULE:UNKNOWN"
+"413-content-too-large":
+  statusCode: "413"
+  expectedErrorType: "MULE:UNKNOWN"
+"414-uri-too-long":
+  statusCode: "414"
+  expectedErrorType: "MULE:UNKNOWN"
+"415-unsupported-media-type":
+  statusCode: "415"
+  expectedErrorType: "HTTP:UNSUPPORTED_MEDIA_TYPE" # PROVEN
+"416-range-not-satisfiable":
+  statusCode: "416"
+  expectedErrorType: "MULE:UNKNOWN"
+"417-expectation-failed":
+  statusCode: "417"
+  expectedErrorType: "MULE:UNKNOWN"
+"418-im-a-teapot":
+  statusCode: "418"
+  expectedErrorType: "MULE:UNKNOWN"                # not IANA-registered; included deliberately
+"421-misdirected-request":
+  statusCode: "421"
+  expectedErrorType: "MULE:UNKNOWN"
+"422-unprocessable-content":
+  statusCode: "422"
+  expectedErrorType: "MULE:UNKNOWN"                # PROVEN
+"423-locked":
+  statusCode: "423"
+  expectedErrorType: "MULE:UNKNOWN"
+"424-failed-dependency":
+  statusCode: "424"
+  expectedErrorType: "MULE:UNKNOWN"
+"425-too-early":
+  statusCode: "425"
+  expectedErrorType: "MULE:UNKNOWN"
+"426-upgrade-required":
+  statusCode: "426"
+  expectedErrorType: "MULE:UNKNOWN"
+"428-precondition-required":
+  statusCode: "428"
+  expectedErrorType: "MULE:UNKNOWN"
+"429-too-many-requests":
+  statusCode: "429"
+  expectedErrorType: "HTTP:TOO_MANY_REQUESTS"      # PROVEN
+"431-request-header-fields-too-large":
+  statusCode: "431"
+  expectedErrorType: "MULE:UNKNOWN"
+"451-unavailable-for-legal-reasons":
+  statusCode: "451"
+  expectedErrorType: "MULE:UNKNOWN"
+
+# --- 5xx server errors --------------------------------------------------------
+"500-internal-server-error":
+  statusCode: "500"
+  expectedErrorType: "HTTP:INTERNAL_SERVER_ERROR"  # PROVEN
+"501-not-implemented":
+  statusCode: "501"
+  expectedErrorType: "MULE:UNKNOWN"
+"502-bad-gateway":
+  statusCode: "502"
+  expectedErrorType: "HTTP:BAD_GATEWAY"            # PROVEN
+"503-service-unavailable":
+  statusCode: "503"
+  expectedErrorType: "HTTP:SERVICE_UNAVAILABLE"    # PROVEN
+"504-gateway-timeout":
+  statusCode: "504"
+  expectedErrorType: "HTTP:GATEWAY_TIMEOUT"        # PROVEN
+"505-http-version-not-supported":
+  statusCode: "505"
+  expectedErrorType: "MULE:UNKNOWN"
+"506-variant-also-negotiates":
+  statusCode: "506"
+  expectedErrorType: "MULE:UNKNOWN"
+"507-insufficient-storage":
+  statusCode: "507"
+  expectedErrorType: "MULE:UNKNOWN"
+"508-loop-detected":
+  statusCode: "508"
+  expectedErrorType: "MULE:UNKNOWN"
+"510-not-extended":
+  statusCode: "510"
+  expectedErrorType: "MULE:UNKNOWN"
+"511-network-authentication-required":
+  statusCode: "511"
+  expectedErrorType: "MULE:UNKNOWN"                # PROVEN - fallback holds for 5xx too

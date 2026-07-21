@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule
+  xmlns:http="http://www.mulesoft.org/schema/mule/http"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+  xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+  xmlns="http://www.mulesoft.org/schema/mule/core"
+  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+  xsi:schemaLocation="
+    http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+    http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+    http://www.mulesoft.org/schema/mule/munit-tools  http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+
+  <!--
+    THE STATUS-LESS ERRORS.
+
+    HTTP:CONNECTIVITY, HTTP:TIMEOUT and HTTP:RETRY_EXHAUSTED arise from the
+    connection rather than from a response, so no status code can produce them
+    and they cannot be rows of the parameterized matrix. They live in their own
+    suite because parameterizations are scoped to munit:config (i.e. to the whole
+    file): had these tests sat in the matrix suite, each would have run 63 times.
+
+    Why they matter to the map: HTTP:TIMEOUT is reachable by two different routes
+    - a real 408 response, and the requester giving up - and the research flagged
+    that these may not be the same code path. The 408 row of the matrix and
+    `requesterTimeoutRaisesHttpTimeout` below are the two halves of that answer.
+    If they disagree, the map says so.
+  -->
+  <munit:config name="impl-http-error-families-test-suite.xml" />
+
+  <!-- Bound: a listener answers here, slowly. -->
+  <munit:dynamic-port
+    propertyName="munit.dynamic.port.families"
+    min="6000"
+    max="7000" />
+
+  <!--
+    Reserved but deliberately NEVER bound - nothing listens on this port, so a
+    request to it is refused. Reserving it through MUnit (rather than hardcoding
+    a number) is what stops a stray local process from making the test lie.
+  -->
+  <munit:dynamic-port
+    propertyName="munit.dynamic.port.families.unbound"
+    min="7001"
+    max="7999" />
+
+  <http:listener-config
+    name="MUnit_Families_HTTP_Listener_config"
+    doc:name="HTTP Listener config">
+    <http:listener-connection
+      host="0.0.0.0"
+      port="${munit.dynamic.port.families}" />
+  </http:listener-config>
+
+  <!-- Points at the slow listener; the short responseTimeout is set per request. -->
+  <http:request-config name="MUnit_Families_HTTP_Request_configuration">
+    <http:request-connection
+      host="localhost"
+      port="${munit.dynamic.port.families}" />
+  </http:request-config>
+
+  <!-- Points at nothing at all: every connection attempt is refused. -->
+  <http:request-config name="MUnit_Families_Unbound_HTTP_Request_configuration">
+    <http:request-connection
+      host="localhost"
+      port="${munit.dynamic.port.families.unbound}" />
+  </http:request-config>
+
+  <!--
+    Same unbound target, but with a finite reconnection strategy. An always-failing
+    connection plus a bounded retry count exhausts the retries by construction -
+    no stateful fail-N-times-then-succeed mock server needed.
+  -->
+  <http:request-config name="MUnit_Families_Retry_HTTP_Request_configuration">
+    <http:request-connection
+      host="localhost"
+      port="${munit.dynamic.port.families.unbound}">
+      <reconnection>
+        <reconnect
+          count="2"
+          frequency="200" />
+      </reconnection>
+    </http:request-connection>
+  </http:request-config>
+
+  <!-- Answers, but only after the requester has already given up. -->
+  <flow name="munit-util-mock-http-families.slow-listener">
+    <http:listener
+      doc:name="Listener (slow)"
+      config-ref="MUnit_Families_HTTP_Listener_config"
+      path="/slow" />
+    <munit-tools:sleep
+      doc:name="Sleep past the requester's responseTimeout"
+      time="3000"
+      timeUnit="MILLISECONDS" />
+    <set-payload
+      doc:name="Too late"
+      value="#['too late']" />
+  </flow>
+
+  <munit:test
+    name="connectionRefusedRaisesHttpConnectivity"
+    timeOut="900000">
+    <munit:execution>
+      <set-variable
+        doc:name="capturedErrorType (seed: no error)"
+        variableName="capturedErrorType"
+        value="#['']" />
+      <try doc:name="Try">
+        <http:request
+          config-ref="MUnit_Families_Unbound_HTTP_Request_configuration"
+          method="GET"
+          doc:name="HTTP Req to an unbound port"
+          path="/" />
+        <error-handler>
+          <on-error-continue
+            enableNotifications="false"
+            logException="false"
+            doc:name="Continue_Capture connectivity error">
+            <set-variable
+              doc:name="capturedErrorType"
+              variableName="capturedErrorType"
+              value="#[(error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default '')]" />
+          </on-error-continue>
+        </error-handler>
+      </try>
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that
+        doc:name="Connection refused is HTTP:CONNECTIVITY"
+        expression="#[vars.capturedErrorType]"
+        is="#[MunitTools::equalTo('HTTP:CONNECTIVITY')]"
+        message="#['connection refused produced [$(vars.capturedErrorType)], not HTTP:CONNECTIVITY']" />
+    </munit:validation>
+  </munit:test>
+
+  <munit:test
+    name="requesterTimeoutRaisesHttpTimeout"
+    timeOut="900000">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-families.slow-listener" />
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <set-variable
+        doc:name="capturedErrorType (seed: no error)"
+        variableName="capturedErrorType"
+        value="#['']" />
+      <try doc:name="Try">
+        <http:request
+          config-ref="MUnit_Families_HTTP_Request_configuration"
+          method="GET"
+          doc:name="HTTP Req that gives up before the listener answers"
+          path="/slow"
+          responseTimeout="500" />
+        <error-handler>
+          <on-error-continue
+            enableNotifications="false"
+            logException="false"
+            doc:name="Continue_Capture timeout error">
+            <set-variable
+              doc:name="capturedErrorType"
+              variableName="capturedErrorType"
+              value="#[(error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default '')]" />
+          </on-error-continue>
+        </error-handler>
+      </try>
+    </munit:execution>
+    <munit:validation>
+      <!--
+        If this is red with HTTP:CONNECTIVITY, that is the answer to the 408
+        question rather than a broken test: correct the assertion and say so in
+        the map.
+      -->
+      <munit-tools:assert-that
+        doc:name="Requester-side timeout is HTTP:TIMEOUT"
+        expression="#[vars.capturedErrorType]"
+        is="#[MunitTools::equalTo('HTTP:TIMEOUT')]"
+        message="#['requester timeout produced [$(vars.capturedErrorType)], not HTTP:TIMEOUT']" />
+    </munit:validation>
+  </munit:test>
+
+  <munit:test
+    name="exhaustedReconnectionRaisesHttpRetryExhausted"
+    timeOut="900000">
+    <munit:execution>
+      <set-variable
+        doc:name="capturedErrorType (seed: no error)"
+        variableName="capturedErrorType"
+        value="#['']" />
+      <try doc:name="Try">
+        <http:request
+          config-ref="MUnit_Families_Retry_HTTP_Request_configuration"
+          method="GET"
+          doc:name="HTTP Req that retries twice against an unbound port"
+          path="/" />
+        <error-handler>
+          <on-error-continue
+            enableNotifications="false"
+            logException="false"
+            doc:name="Continue_Capture retry error">
+            <set-variable
+              doc:name="capturedErrorType"
+              variableName="capturedErrorType"
+              value="#[(error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default '')]" />
+          </on-error-continue>
+        </error-handler>
+      </try>
+    </munit:execution>
+    <munit:validation>
+      <!--
+        Least certain of the three: a bounded reconnection strategy may still
+        surface the final failure as HTTP:CONNECTIVITY rather than
+        HTTP:RETRY_EXHAUSTED. Whichever it is, it is a publishable finding -
+        correct the assertion to what the connector does and footnote it.
+      -->
+      <munit-tools:assert-that
+        doc:name="Exhausted retries is HTTP:RETRY_EXHAUSTED"
+        expression="#[vars.capturedErrorType]"
+        is="#[MunitTools::equalTo('HTTP:RETRY_EXHAUSTED')]"
+        message="#['exhausted retries produced [$(vars.capturedErrorType)], not HTTP:RETRY_EXHAUSTED']" />
+    </munit:validation>
+  </munit:test>
+
+</mule>

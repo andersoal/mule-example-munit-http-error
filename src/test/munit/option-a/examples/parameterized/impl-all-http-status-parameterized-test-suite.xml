@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule
+  xmlns:http="http://www.mulesoft.org/schema/mule/http"
+  xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:munit="http://www.mulesoft.org/schema/mule/munit"
+  xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+  xmlns="http://www.mulesoft.org/schema/mule/core"
+  xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+  xsi:schemaLocation="
+    http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+    http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+    http://www.mulesoft.org/schema/mule/munit-tools  http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+
+  <!--
+    THE STATUS MAP, as a parameterized matrix.
+
+    Same Option A technique as ../impl-all-http-status-test-suite.xml (a real
+    local HTTP listener acting as the mock server, so the connector itself is the
+    oracle), but the 63 status codes live in data instead of in 63 copies of the
+    same XML. One `munit:test` below runs once per row of
+    http-status-parameterizations.yaml, and MUnit labels each run with that row's
+    name - so a red result names its own status code with no extra bookkeeping.
+
+    The published table (http-status-error-map-rows.adoc) is generated from that
+    same YAML, which is why the YAML is the map and this file is only the proof.
+    See docs/adr/0001 and docs/adr/0002 at the repo root.
+  -->
+  <munit:config name="impl-all-http-status-parameterized-test-suite.xml">
+    <!--
+      NOTE: the `file` path is resolved against the TEST CLASSPATH, not against
+      this file's directory. The YAML is colocated here deliberately (the map's
+      data, suite and docs travel together). If the runtime cannot resolve it,
+      try the bare file name first, and failing that move ONLY the YAML to
+      src/test/resources/option-a/ and point `file` there - the docs stay put.
+    -->
+    <munit:parameterizations
+      file="option-a/examples/parameterized/http-status-parameterizations.yaml" />
+  </munit:config>
+
+  <!--
+    Global names must be unique across EVERY suite in the project, not just this
+    file - hence the `.parameterized` suffix everywhere. See the README's
+    "Two (or more) configuration elements have been defined with the same global
+    name" note.
+  -->
+  <munit:dynamic-port
+    propertyName="munit.dynamic.port.parameterized"
+    min="6000"
+    max="7000" />
+
+  <http:listener-config
+    name="MUnit_Parameterized_HTTP_Listener_config"
+    doc:name="HTTP Listener config">
+    <http:listener-connection
+      host="0.0.0.0"
+      port="${munit.dynamic.port.parameterized}" />
+  </http:listener-config>
+
+  <http:request-config name="MUnit_Parameterized_HTTP_Request_configuration">
+    <http:request-connection
+      host="localhost"
+      port="${munit.dynamic.port.parameterized}" />
+  </http:request-config>
+
+  <!-- Mock server: returns whatever status code arrives via query params. -->
+  <flow name="munit-util-mock-http-parameterized.listener">
+    <http:listener
+      doc:name="Listener"
+      config-ref="MUnit_Parameterized_HTTP_Listener_config"
+      path="/*">
+      <http:response
+        statusCode="#[(attributes.queryParams.statusCode default attributes.queryParams.httpStatus) default 200]"
+        reasonPhrase="#[attributes.queryParams.reasonPhrase]">
+        <http:headers>
+          <![CDATA[#[attributes.headers]]]>
+        </http:headers>
+      </http:response>
+      <http:error-response
+        statusCode="#[(attributes.queryParams.statusCode default attributes.queryParams.httpStatus) default 500]"
+        reasonPhrase="#[attributes.queryParams.reasonPhrase]">
+        <http:body>
+          <![CDATA[#[payload]]]>
+        </http:body>
+        <http:headers>
+          <![CDATA[#[attributes.headers]]]>
+        </http:headers>
+      </http:error-response>
+    </http:listener>
+    <logger
+      level="TRACE"
+      doc:name="doc: Listener echoes the request payload with the requested HTTP status" />
+  </flow>
+
+  <!--
+    ONE test body for all 63 rows.
+
+    It has to tolerate both outcomes, because whether a row raises at all is
+    exactly what the map is measuring - a body that assumed an error would beg
+    the question for every 1xx/2xx/3xx row.
+
+      success path : the request returns, and `capturedErrorType` keeps the ""
+                     it was seeded with before the request ran
+      error path   : on-error-continue overwrites both captures from the error
+
+    `error` is not reachable from munit:validation, so the values are carried
+    across in vars.
+  -->
+  <munit:test
+    name="statusCodeProducesExpectedErrorType"
+    timeOut="900000">
+    <munit:enable-flow-sources>
+      <munit:enable-flow-source
+        value="munit-util-mock-http-parameterized.listener" />
+    </munit:enable-flow-sources>
+    <munit:execution>
+      <!--
+        Seeded BEFORE the request so the success path needs no assignment of its
+        own: if nothing throws, these are what validation sees.
+      -->
+      <set-variable
+        doc:name="capturedErrorType (seed: no error)"
+        variableName="capturedErrorType"
+        value="#['']" />
+      <set-variable
+        doc:name="capturedStatusCode (seed: none)"
+        variableName="capturedStatusCode"
+        value="#[0]" />
+      <try doc:name="Try">
+        <http:request
+          config-ref="MUnit_Parameterized_HTTP_Request_configuration"
+          method="GET"
+          doc:name="HTTP Req to mock listener (p:statusCode)"
+          path="/"
+          responseTimeout="10000">
+          <http:query-params>
+            <![CDATA[#[{ statusCode: p('statusCode') as Number }]]]>
+          </http:query-params>
+        </http:request>
+        <!-- Reached only when the connector did NOT raise for this code. -->
+        <set-variable
+          doc:name="capturedStatusCode (from response)"
+          variableName="capturedStatusCode"
+          value="#[attributes.statusCode default 0]" />
+        <error-handler>
+          <on-error-continue
+            enableNotifications="false"
+            logException="false"
+            doc:name="Continue_Capture simulated HTTP error">
+            <set-variable
+              doc:name="capturedStatusCode (from error)"
+              variableName="capturedStatusCode"
+              value="#[error.errorMessage.attributes.statusCode default 0]" />
+            <set-variable
+              doc:name="capturedErrorType (from error)"
+              variableName="capturedErrorType"
+              value="#[(error.errorType.namespace default '') ++ ':' ++ (error.errorType.identifier default '')]" />
+          </on-error-continue>
+        </error-handler>
+      </try>
+      <!--
+        The row's own audit line. Useful when correcting a seeded hypothesis:
+        the log says what the connector actually did, the assertion says what we
+        guessed.
+      -->
+      <logger
+        level="INFO"
+        doc:name="Log observed outcome for this row"
+        message="#[output application/json --- { row: p('statusCode'), expectedErrorType: p('expectedErrorType'), observedErrorType: vars.capturedErrorType, observedStatusCode: vars.capturedStatusCode }]" />
+    </munit:execution>
+    <munit:validation>
+      <munit-tools:assert-that
+        doc:name="errorType matches the map"
+        expression="#[vars.capturedErrorType]"
+        is="#[MunitTools::equalTo(p('expectedErrorType'))]"
+        message="#['status $(p('statusCode')): observed errorType [$(vars.capturedErrorType)] differs from mapped [$(p('expectedErrorType'))]']" />
+      <munit-tools:assert-that
+        doc:name="status code survived the round trip"
+        expression="#[vars.capturedStatusCode]"
+        is="#[MunitTools::equalTo(p('statusCode') as Number)]"
+        message="#['status $(p('statusCode')): observed statusCode [$(vars.capturedStatusCode)] differs from the one requested']" />
+    </munit:validation>
+  </munit:test>
+
+</mule>

@@ -34,3 +34,10 @@ applyTo: "src/test/munit/option-a/**/*.xml"
 - Missing enable-flow-source for helper/listener flows.
 - Attribute mismatch between runtime request and mock-when selectors.
 - Duplicate global config collisions from importing external test utility files instead of colocated flows.
+- A try/on-error-continue in munit:execution with no munit:validation block: the test swallows every error and can never fail.
+
+## The Status Map (examples/parameterized/)
+- The map's data lives in `examples/parameterized/http-status-parameterizations.yaml`, one row per status code. Edit mappings there, never in test XML.
+- `http-status-error-map-rows.adoc` is generated from that YAML and must be regenerated whenever the YAML changes. There is no script and no build binding: ask Claude Code to regenerate the map rows. A stale rows file is the only way the published table can lie.
+- Status-less error types (`HTTP:CONNECTIVITY`, `HTTP:TIMEOUT`, `HTTP:RETRY_EXHAUSTED`) belong in `impl-http-error-families-test-suite.xml`, never in the parameterized suite: parameterizations are scoped to munit:config, so any test added there runs once per row.
+- When a row is red, the connector is right and the YAML is wrong. Correct the YAML to the observed error type, then regenerate.

@@ -51,6 +51,14 @@ Here a summary of the four options:
 
 We will conclude with a detailed comparative analysis and a step-by-step tutorial for implementing the recommended best practice, Option A, which offers the best balance of realism and reusability.
 
+== Which error does a status code actually produce?
+
+MuleSoft documents the *set* of `HTTP:*` error types the Request operation can raise, but not which status code produces which one — and not what happens to a code that has no named type.
+
+link:src/test/munit/option-a/examples/parameterized/README.adoc[*The HTTP status → Mule error type map*] answers that for all 63 status codes, with every row backed by a green MUnit test built on Option A. The headline finding:
+
+* *A 4xx or 5xx code with no named error type raises `MULE:UNKNOWN`* — so `on-error-propagate type="HTTP:ANY"` does *not* catch a 409, 410, 422 or 511. Match on `error.errorMessage.attributes.statusCode` when handling unnamed codes.
+
 == General Considerations
 
 The base for most of the options (A,B,C or D) is the feature *enabled flows* and **then-call** in each munit test.

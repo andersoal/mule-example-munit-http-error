@@ -1,0 +1,145 @@
+= HTTP Status → Mule Error Type: The Map
+:toc:
+:toc-placement:
+:source-highlighter: highlight.js
+:icons: font
+
+toc::[]
+
+== What this is
+
+MuleSoft's documentation publishes the *set* of `HTTP:*` error types the HTTP Request
+operation can raise. It does not publish which status code produces which one, and it
+does not publish what happens to a status code that has no named type at all.
+
+This page publishes that map, and every row is backed by a green MUnit test rather
+than by inference from the type's name.
+
+The harness is *Option A* (see the repo `README.adoc`): a real HTTP listener on a
+dynamic port answers a real request, so the connector itself decides what error to
+raise. Nothing here is synthesised.
+
+== How to read a row
+
+The map is data, not prose. `http-status-parameterizations.yaml` holds one row per
+status code; `impl-all-http-status-parameterized-test-suite.xml` runs one test body
+once per row; the table below is generated from that same YAML.
+
+That arrangement is what makes the table trustworthy: a row whose expected error type
+disagrees with the connector is a *red test named after its own status code*. So
+"the suite is green" and "the table is correct" are the same statement.
+
+[IMPORTANT]
+====
+The table's freshness is a *social* guarantee, not a mechanical one. There is no
+generator script and no build binding — the rows are regenerated on request (see
+`docs/adr/0002-...`). If you edit the YAML, regenerate the rows, or the two will
+drift apart silently.
+====
+
+== The map
+
+include::http-status-error-map-rows.adoc[]
+
+== The fallback rule
+
+*A 4xx or 5xx status code with no named error type produces `MULE:UNKNOWN`* — not a
+generic `HTTP:*` error, and not the nearest named relative.
+
+This was the single largest unknown when the map was planned, because it determines
+how many rows collapse into one rule. It is proven in both directions: 409, 410 and
+422 (4xx) and 511 (5xx) all raise `MULE:UNKNOWN` in the longhand suite. The practical
+consequence for your flows: *`on-error-propagate type="HTTP:ANY"` will not catch a
+409*. If you are handling unnamed codes, match on
+`error.errorMessage.attributes.statusCode`, not on the error type.
+
+== Footnotes where the columns don't tell the truth
+
+=== The two roads to a timeout
+
+`HTTP:TIMEOUT` is reachable two ways — a downstream system answering *408*, and the
+requester giving up before any answer arrives. These are not obviously the same code
+path, and MuleSoft's docs do not say whether they produce the same error type.
+
+The map answers both halves: the *408* row above, and
+`requesterTimeoutRaisesHttpTimeout` in `impl-http-error-families-test-suite.xml`. If
+they ever disagree, that disagreement is the finding.
+
+=== Errors no status code can produce
+
+`HTTP:CONNECTIVITY`, `HTTP:TIMEOUT` and `HTTP:RETRY_EXHAUSTED` come from the
+connection, not from a response, so they are absent from the table by construction.
+They are proven separately in `impl-http-error-families-test-suite.xml`:
+
+* *`HTTP:CONNECTIVITY`* — a request to a reserved-but-never-bound port.
+* *`HTTP:TIMEOUT`* — a listener that sleeps past the requester's `responseTimeout`.
+* *`HTTP:RETRY_EXHAUSTED`* — an always-failing connection plus a bounded
+  `<reconnect count="2"/>`, which exhausts the retries by construction rather than
+  needing a mock server that fails N times and then succeeds.
+
+`HTTP:SECURITY`, `HTTP:CLIENT_SECURITY` and `HTTP:PARSING` are also outside the map:
+the first two depend on the requester's security configuration, and `HTTP:PARSING`
+depends on the response body disagreeing with its declared MIME type. None of the
+three is a function of the status code.
+
+=== 1xx and 3xx are measured, not assumed
+
+Interim (1xx) responses are normally consumed by the transport layer and may never
+reach the flow at all, and 3xx behaviour depends on `followRedirects` (default
+`true`). Rather than declaring these special in advance, they are seeded as ordinary
+rows and left to the connector to settle.
+
+If a row turns out not to be producible through a real listener, it is *removed from
+the YAML and documented here* instead — "not producible through a real listener" is
+a finding worth publishing, not a gap to hide.
+
+One caveat on the 3xx rows: the mock listener sends no `Location` header, so
+`followRedirects` has nothing to follow and these rows measure an *unfollowable*
+redirect. A genuine redirect test is possible with this harness — the listener echoes
+request headers into the response, so passing a `location` header produces a
+followable 3xx — but it is not part of the map.
+
+=== What the map deliberately does not assert
+
+Payload preservation, header preservation and `reasonPhrase` are properties of the
+*harness*, not of the status code: the mock listener echoes back whatever it was
+given, so asserting them on all 63 rows would prove one fact 63 times. They are
+covered once, in `../../impl-test-suite.xml`.
+
+== Files
+
+[cols="1,3"]
+|===
+| File | Role
+
+| `http-status-parameterizations.yaml`
+| The map's data. 63 rows. Edit here, then regenerate the table.
+
+| `impl-all-http-status-parameterized-test-suite.xml`
+| One test body, run once per row. The proof.
+
+| `impl-http-error-families-test-suite.xml`
+| The status-less errors, which cannot be rows.
+
+| `http-status-error-map-rows.adoc`
+| Generated table rows, included above. Do not edit.
+
+| `../impl-all-http-status-test-suite.xml`
+| The longhand ancestor: 19 codes, one `munit:test` each. Kept as the teaching
+  example of the same technique before it was turned into data.
+|===
+
+== Running it
+
+[source,bash]
+----
+mvn test -Dmunit.test=statusCodeProducesExpectedErrorType
+----
+
+Use `mvn test` alone — skip `mvn clean` while Anypoint Studio holds a lock on
+`target\` on Windows.
+
+A failure reports as the parameterization's own name, e.g.
+`statusCodeProducesExpectedErrorType {451-unavailable-for-legal-reasons}`, and the
+assertion message carries both the observed and the mapped error type. Correct the
+YAML to what the connector actually did, re-run, regenerate the rows.
