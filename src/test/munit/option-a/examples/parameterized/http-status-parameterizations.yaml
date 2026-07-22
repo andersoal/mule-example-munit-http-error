@@ -2,7 +2,10 @@
 # HTTP status -> Mule error type map: the data.
 #
 # One entry per IANA-registered HTTP status code (62) plus 418 (not registered,
-# but universally implemented) = 63 rows.
+# but universally implemented) = 63 rows, of which 5 are currently commented out
+# (the four 1xx codes and 408) leaving 58 active. A commented-out row is a
+# deliberate exclusion, not a deletion: it stays here as the record of a code the
+# harness does not currently drive, and it is footnoted in README.adoc.
 #
 # Each row drives ONE run of `statusCodeProducesExpectedErrorType` in
 # impl-all-http-status-parameterized-test-suite.xml. The parameterization name

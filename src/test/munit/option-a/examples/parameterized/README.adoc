@@ -61,9 +61,10 @@ consequence for your flows: *`on-error-propagate type="HTTP:ANY"` will not catch
 requester giving up before any answer arrives. These are not obviously the same code
 path, and MuleSoft's docs do not say whether they produce the same error type.
 
-The map answers both halves: the *408* row above, and
-`requesterTimeoutRaisesHttpTimeout` in `impl-http-error-families-test-suite.xml`. If
-they ever disagree, that disagreement is the finding.
+Only one half is currently answered. *The 408 row is commented out of the YAML*, so
+the requester-side road — `requesterTimeoutRaisesHttpTimeout` in
+`impl-http-error-families-test-suite.xml` — carries the question alone. Re-enable the
+408 row to close it: if the two roads disagree, that disagreement is the finding.
 
 === Errors no status code can produce
 
@@ -89,9 +90,14 @@ reach the flow at all, and 3xx behaviour depends on `followRedirects` (default
 `true`). Rather than declaring these special in advance, they are seeded as ordinary
 rows and left to the connector to settle.
 
-If a row turns out not to be producible through a real listener, it is *removed from
-the YAML and documented here* instead — "not producible through a real listener" is
-a finding worth publishing, not a gap to hide.
+If a row turns out not to be producible through a real listener, it is *commented out
+of the YAML and documented here* instead — "not producible through a real listener"
+is a finding worth publishing, not a gap to hide. The row stays in the file as the
+record of a code the harness does not drive.
+
+*The four 1xx rows (100, 101, 102, 103) are currently commented out*, so the map is
+silent on interim responses rather than claiming they raise nothing. The 3xx rows
+remain active.
 
 One caveat on the 3xx rows: the mock listener sends no `Location` header, so
 `followRedirects` has nothing to follow and these rows measure an *unfollowable*

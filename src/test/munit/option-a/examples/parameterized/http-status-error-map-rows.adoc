@@ -9,17 +9,6 @@
 | Status | Mule error type | Proven by
 
 
-3+| *1xx informational*
-
-| 100 +
-_continue_ | _(no error raised)_ | seeded - awaiting first run
-| 101 +
-_switching protocols_ | _(no error raised)_ | seeded - awaiting first run
-| 102 +
-_processing_ | _(no error raised)_ | seeded - awaiting first run
-| 103 +
-_early hints_ | _(no error raised)_ | seeded - awaiting first run
-
 3+| *2xx success*
 
 | 200 +
@@ -82,8 +71,6 @@ _method not allowed_ | `HTTP:METHOD_NOT_ALLOWED` | green test (longhand suite)
 _not acceptable_ | `HTTP:NOT_ACCEPTABLE` | seeded - awaiting first run
 | 407 +
 _proxy authentication required_ | `MULE:UNKNOWN` | seeded - awaiting first run
-| 408 +
-_request timeout_ | `HTTP:TIMEOUT` | seeded - awaiting first run
 | 409 +
 _conflict_ | `MULE:UNKNOWN` | green test (establishes the fallback)
 | 410 +
