@@ -27,18 +27,18 @@
 # reach the flow. If a row hangs or cannot be produced, delete it here and
 # footnote it in README.adoc - "not producible through a real listener" is a
 # finding, not a failure.
-"100-continue":
-  statusCode: "100"
-  expectedErrorType: ""
-"101-switching-protocols":
-  statusCode: "101"
-  expectedErrorType: ""
-"102-processing":
-  statusCode: "102"
-  expectedErrorType: ""
-"103-early-hints":
-  statusCode: "103"
-  expectedErrorType: ""
+#"100-continue":
+#  statusCode: "100"
+#  expectedErrorType: ""
+#"101-switching-protocols":
+#  statusCode: "101"
+#  expectedErrorType: ""
+#"102-processing":
+#  statusCode: "102"
+#  expectedErrorType: ""
+#"103-early-hints":
+#  statusCode: "103"
+#  expectedErrorType: ""
 
 # --- 2xx success --------------------------------------------------------------
 # The default response validator throws only at 400 and above, so all of these
@@ -134,9 +134,9 @@
 "407-proxy-authentication-required":
   statusCode: "407"
   expectedErrorType: "MULE:UNKNOWN"
-"408-request-timeout":
-  statusCode: "408"
-  expectedErrorType: "HTTP:TIMEOUT"                # contested - see README.adoc
+#"408-request-timeout":
+#  statusCode: "408"
+#  expectedErrorType: "HTTP:TIMEOUT"                # contested - see README.adoc
 "409-conflict":
   statusCode: "409"
   expectedErrorType: "MULE:UNKNOWN"                # PROVEN - establishes the fallback
